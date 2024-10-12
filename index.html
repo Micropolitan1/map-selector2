@@ -60,11 +60,33 @@
         input[type="range"] {
             width: 100%;
         }
+        #brand-banner {
+            width: 100%;
+            height: auto;
+            margin-bottom: 20px;
+        }
+        #requestButton {
+            width: 100%;
+            padding: 10px;
+            margin-top: 15px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        #requestButton:hover {
+            background-color: #0056b3;
+        }
     </style>
 </head>
 <body>
     <div id="container">
         <div id="controls">
+            <div id="banner">
+                <a href="https://thangs.com/designer/micropolitan" target="_blank">
+                    <img src="images/banner.png" alt="Brand Banner" id="brand-banner">
+                </a>
+            </div>
             <div class="control-item">
                 <input type="text" id="location-search" placeholder="Search for a city or location">
                 <button id="searchButton">Search</button>
@@ -87,6 +109,10 @@
             </div>
             <div class="control-item">
                 <button id="copyButton">Copy Coordinates</button>
+            </div>
+            <div class="control-item">
+                <button id="requestButton" onclick="window.open('https://discord.com/users/1257057252825759867', '_blank')">Request your custom map</button>
+                <p>Send a message with your copied coordinates, and we'll confirm if we can make it.</p>
             </div>
             <div id="recommendations" class="control-item">
                 <p>Recommended Areas:</p>
