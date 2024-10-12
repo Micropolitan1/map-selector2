@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <title>Map Area Selector</title>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #container {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+        #controls {
+            width: 300px;
+            padding: 20px;
+            box-sizing: border-box;
+            background-color: #f8f8f8;
+            overflow-y: auto;
+            height: 100%;
+            position: fixed;
+            left: 0;
+            top: 0;
+            z-index: 1000;
+        }
+        #map {
+            flex-grow: 1;
+            height: 100%;
+            margin-left: 300px;
+        }
+        #warning {
+            color: red;
+            display: none;
+        }
+        #location-search {
+            width: 65%;
+        }
+        #searchButton {
+            width: 30%;
+        }
+        .control-item {
+            margin-top: 15px;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+        }
+        input[type="text"], input[type="number"] {
+            width: 100%;
+            padding: 5px;
+            margin-top: 5px;
+        }
+        input[type="range"] {
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="controls">
+            <div class="control-item">
+                <input type="text" id="location-search" placeholder="Search for a city or location">
+                <button id="searchButton">Search</button>
+            </div>
+            <div class="control-item">
+                <button id="showSelectionButton">Show Selection Square</button>
+            </div>
+            <div class="control-item">
+                <button id="toggleViewButton">Toggle Satellite View</button>
+            </div>
+            <div id="info" class="control-item">
+                <p>Coordinates:</p>
+                <p>Top: <span id="top-coord"></span></p>
+                <p>Bottom: <span id="bottom-coord"></span></p>
+                <p>Left: <span id="left-coord"></span></p>
+                <p>Right: <span id="right-coord"></span></p>
+                <p>Area size (km²): <input type="number" id="area-input" step="0.01" min="0.01"></p>
+                <input type="range" id="area-slider" min="0.1" max="4" step="0.1">
+                <p id="warning">4km² max</p>
+            </div>
+            <div class="control-item">
+                <button id="copyButton">Copy Coordinates</button>
+            </div>
+            <div id="recommendations" class="control-item">
+                <p>Recommended Areas:</p>
+                <ul>
+                    <li>Large Cities = 3-4 km²</li>
+                    <li>Small Cities = 1-3 km²</li>
+                    <li>Stadiums = 0.25 km²</li>
+                </ul>
+            </div>
+        </div>
+        <div id="map"></div>
+    </div>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-draw/dist/leaflet.draw.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initialize the map
+            let map = L.map('map').setView([39.963, -75.172], 14); // Zoomed in more initially
+
+            // Load map tiles from OpenStreetMap
+            let osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
+
+            let satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles &copy; Esri, Source: DigitalGlobe, GeoEye, i-cubed, USDA, USGS, AEX, Getmapping, Aerogrid, IGN, IGP, swisstopo, GIS User Community'
+            });
+
+            L.control.scale().addTo(map);
+
+            let rectangle;
+            let centerMarker;
+            let areaInput = document.getElementById('area-input');
+            let areaSlider = document.getElementById('area-slider');
+            let warningText = document.getElementById('warning');
+
+            document.getElementById('showSelectionButton').addEventListener('click', () => {
+                // Define the initial square bounds with 3.5 km² area
+                const center = map.getCenter();
+                const initialArea = 3.5; // Initial area of 3.5 km²
+                const latHalfSideLength = Math.sqrt(initialArea / 111 / 111) / 2;
+                
+                // Adjust longitude based on latitude
+                const lngHalfSideLength = latHalfSideLength / Math.cos(center.lat * Math.PI / 180);
+
+                const bounds = [
+                    [center.lat - latHalfSideLength, center.lng - lngHalfSideLength],
+                    [center.lat + latHalfSideLength, center.lng + lngHalfSideLength]
+                ];
+
+                if (rectangle) {
+                    map.removeLayer(rectangle);
+                }
+                if (centerMarker) {
+                    map.removeLayer(centerMarker);
+                }
+
+                // Create a locked square using the initial bounds
+                rectangle = L.rectangle(bounds, { color: "#ff7800", weight: 1, fillColor: "green" }).addTo(map);
+                centerMarker = L.marker(center, { draggable: true }).addTo(map);
+                centerMarker.on('drag', updateRectangle);
+
+                areaInput.value = calculateArea(latHalfSideLength).toFixed(2);
+                areaSlider.value = calculateArea(latHalfSideLength).toFixed(2);
+
+                updateInfo();
+            });
+
+            document.getElementById('toggleViewButton').addEventListener('click', () => {
+                if (map.hasLayer(osmLayer)) {
+                    map.removeLayer(osmLayer);
+                    satelliteLayer.addTo(map);
+                } else {
+                    map.removeLayer(satelliteLayer);
+                    osmLayer.addTo(map);
+                }
+            });
+
+            document.getElementById('searchButton').addEventListener('click', () => {
+                const location = document.getElementById('location-search').value;
+                if (location) {
+                    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${location}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.length > 0) {
+                                const lat = data[0].lat;
+                                const lon = data[0].lon;
+                                map.setView([lat, lon], 14); // Zoomed in more initially
+                            } else {
+                                alert('Location not found');
+                            }
+                        });
+                }
+            });
+
+            areaSlider.addEventListener('input', () => {
+                areaInput.value = areaSlider.value;
+                updateRectangleSizeFromInput();
+            });
+
+            // Update the calculateArea function to use latitude for calculation
+            function calculateArea(latHalfSideLength) {
+                const sideLengthKm = latHalfSideLength * 2 * 111; // Convert latitude half-side length in degrees to full side length in km
+                return sideLengthKm * sideLengthKm; // Area in km²
+            }
+
+            // Ensure updateRectangle uses the same logic
+            function updateRectangle() {
+                const center = centerMarker.getLatLng();
+                const area = parseFloat(areaInput.value);
+                const latHalfSideLength = Math.sqrt(area / 111 / 111) / 2;
+                
+                // Adjust longitude based on latitude
+                const lngHalfSideLength = latHalfSideLength / Math.cos(center.lat * Math.PI / 180);
+
+                const newBounds = [
+                    [center.lat - latHalfSideLength, center.lng - lngHalfSideLength],
+                    [center.lat + latHalfSideLength, center.lng + lngHalfSideLength]
+                ];
+
+                rectangle.setBounds(newBounds);
+                updateInfo();
+            }
+
+            function updateRectangleSizeFromInput() {
+                const area = parseFloat(areaInput.value);
+                if (!isNaN(area) && area > 0) {
+                    updateRectangle();
+                }
+            }
+
+            function calculateArea(latHalfSideLength) {
+                const latSideLengthKm = latHalfSideLength * 2 * 111; // Convert latitude half-side length in degrees to full side length in km
+                const lngSideLengthKm = latSideLengthKm; // For a square, these should be equal
+                return latSideLengthKm * lngSideLengthKm; // Area in km²
+            }
+
+            areaInput.addEventListener('change', updateRectangleSizeFromInput);
+            areaInput.addEventListener('blur', updateRectangleSizeFromInput);
+
+            function updateInfo() {
+                const bounds = rectangle.getBounds();
+                const ne = bounds.getNorthEast();
+                const sw = bounds.getSouthWest();
+                const nw = bounds.getNorthWest();
+                const se = bounds.getSouthEast();
+
+                // Update the coordinates to display top, bottom, left, and right values
+                document.getElementById('top-coord').innerText = `${ne.lat.toFixed(6)}`;
+                document.getElementById('bottom-coord').innerText = `${sw.lat.toFixed(6)}`;
+                document.getElementById('left-coord').innerText = `${nw.lng.toFixed(6)}`;
+                document.getElementById('right-coord').innerText = `${ne.lng.toFixed(6)}`;
+
+                // Update area input field
+                const halfSideLength = Math.abs(ne.lat - sw.lat) / 2; // Half-side length in degrees
+                const area = calculateArea(halfSideLength).toFixed(2); // Area in km²
+                areaInput.value = area;
+                areaSlider.value = area;
+
+                // Update rectangle color based on area size
+                if (area <= 4) {
+                    rectangle.setStyle({ fillColor: "green" });
+                    warningText.style.display = 'none';
+                } else {
+                    rectangle.setStyle({ fillColor: "red" });
+                    warningText.style.display = 'block';
+                }
+            }
+
+            document.getElementById('copyButton').addEventListener('click', () => {
+                const coordinates = `${document.getElementById('left-coord').innerText},${document.getElementById('bottom-coord').innerText},${document.getElementById('right-coord').innerText},${document.getElementById('top-coord').innerText}`;
+                navigator.clipboard.writeText(coordinates).then(() => {
+                    alert('Coordinates copied to clipboard');
+                });
+            });
+        });
+    </script>
+</body>
+</html>
