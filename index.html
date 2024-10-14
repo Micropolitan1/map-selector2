@@ -235,6 +235,7 @@
                 ];
 
                 rectangle.setBounds(newBounds);
+                centerMarker.setLatLng(center);
                 updateInfo();
             }
 
@@ -262,10 +263,10 @@
                 const se = bounds.getSouthEast();
 
                 // Update the coordinates to display top, bottom, left, and right values
-                document.getElementById('top-coord').innerText = `${ne.lat.toFixed(6)}`;
-                document.getElementById('bottom-coord').innerText = `${sw.lat.toFixed(6)}`;
-                document.getElementById('left-coord').innerText = `${nw.lng.toFixed(6)}`;
-                document.getElementById('right-coord').innerText = `${ne.lng.toFixed(6)}`;
+                document.getElementById('top-coord').value = ne.lat.toFixed(6);
+                document.getElementById('bottom-coord').value = sw.lat.toFixed(6);
+                document.getElementById('left-coord').value = nw.lng.toFixed(6);
+                document.getElementById('right-coord').value = ne.lng.toFixed(6);
 
                 // Update area input field
                 const halfSideLength = Math.abs(ne.lat - sw.lat) / 2; // Half-side length in degrees
@@ -284,7 +285,7 @@
             }
 
             document.getElementById('copyButton').addEventListener('click', () => {
-                const coordinates = `${document.getElementById('left-coord').innerText},${document.getElementById('bottom-coord').innerText},${document.getElementById('right-coord').innerText},${document.getElementById('top-coord').innerText}`;
+                const coordinates = `${document.getElementById('left-coord').value},${document.getElementById('bottom-coord').value},${document.getElementById('right-coord').value},${document.getElementById('top-coord').value}`;
                 navigator.clipboard.writeText(coordinates).then(() => {
                     alert('Coordinates copied to clipboard');
                 });
@@ -295,10 +296,10 @@
                     const text = await navigator.clipboard.readText();
                     const [left, bottom, right, top] = text.split(',').map(Number);
                     if (!isNaN(left) && !isNaN(bottom) && !isNaN(right) && !isNaN(top)) {
-                        document.getElementById('top-coord').innerText = top.toFixed(6);
-                        document.getElementById('bottom-coord').innerText = bottom.toFixed(6);
-                        document.getElementById('left-coord').innerText = left.toFixed(6);
-                        document.getElementById('right-coord').innerText = right.toFixed(6);
+                        document.getElementById('top-coord').value = top.toFixed(6);
+                        document.getElementById('bottom-coord').value = bottom.toFixed(6);
+                        document.getElementById('left-coord').value = left.toFixed(6);
+                        document.getElementById('right-coord').value = right.toFixed(6);
 
                         const bounds = [
                             [bottom, left],
@@ -308,8 +309,14 @@
                         if (rectangle) {
                             map.removeLayer(rectangle);
                         }
+                        if (centerMarker) {
+                            map.removeLayer(centerMarker);
+                        }
 
                         rectangle = L.rectangle(bounds, { color: "#ff7800", weight: 1, fillColor: "green" }).addTo(map);
+                        const center = [(top + bottom) / 2, (left + right) / 2];
+                        centerMarker = L.marker(center, { draggable: true }).addTo(map);
+                        centerMarker.on('drag', updateRectangle);
                         map.fitBounds(bounds);
                     } else {
                         alert('Invalid coordinates format');
