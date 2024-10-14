@@ -109,6 +109,7 @@
             </div>
             <div class="control-item">
                 <button id="copyButton">Copy Coordinates</button>
+                <button id="pasteButton">Paste Coordinates</button>
             </div>
             <div class="control-item">
                 <button id="requestButton" onclick="window.open('https://discord.com/users/1257057252825759867', '_blank')">Request your custom map</button>
@@ -287,6 +288,35 @@
                 navigator.clipboard.writeText(coordinates).then(() => {
                     alert('Coordinates copied to clipboard');
                 });
+            });
+
+            document.getElementById('pasteButton').addEventListener('click', async () => {
+                try {
+                    const text = await navigator.clipboard.readText();
+                    const [left, bottom, right, top] = text.split(',').map(Number);
+                    if (!isNaN(left) && !isNaN(bottom) && !isNaN(right) && !isNaN(top)) {
+                        document.getElementById('top-coord').innerText = top.toFixed(6);
+                        document.getElementById('bottom-coord').innerText = bottom.toFixed(6);
+                        document.getElementById('left-coord').innerText = left.toFixed(6);
+                        document.getElementById('right-coord').innerText = right.toFixed(6);
+
+                        const bounds = [
+                            [bottom, left],
+                            [top, right]
+                        ];
+
+                        if (rectangle) {
+                            map.removeLayer(rectangle);
+                        }
+
+                        rectangle = L.rectangle(bounds, { color: "#ff7800", weight: 1, fillColor: "green" }).addTo(map);
+                        map.fitBounds(bounds);
+                    } else {
+                        alert('Invalid coordinates format');
+                    }
+                } catch (err) {
+                    alert('Failed to read from clipboard');
+                }
             });
         });
     </script>
